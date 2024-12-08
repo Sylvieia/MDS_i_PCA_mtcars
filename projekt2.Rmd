@@ -1,0 +1,1000 @@
+---
+title: "Analiza zbioru mtcars"
+author: "Sylvia Romek, 418348"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# **Wstęp - cel pracy**
+
+Celem projektu jest przeprowadzenie wizualizacji obiektów n-wymiarowych
+w przestrzeni m-wymiarowej (m\<n) za pomocą różnych technik skalowania
+wielowymiarowego (MDS) i analizy składowych głównych (PCA), aby
+zredukować ilość zmiennych i przestawić je w postaci 2-wymiarowej lub
+3-wymiarowej.
+
+W tym projekcie korzystam ze zbioru wbudowanego w R, jakim jest mtcars.
+Analiza obejmie także eksploracyjną analizę danych (EDA).
+
+Zastosowane biblioteki:
+
+```{r message=FALSE, warning=FALSE, verbose = FALSE}
+library(psych)
+library(corrplot)
+library(RColorBrewer)
+library(magrittr)
+library(dplyr)
+library(ggpubr)
+library(knitr)
+library(plotly)
+library(vegan)
+library(tidyr)
+library(MASS)
+library(tibble)  
+library(ggplot2)
+```
+
+# **Eksploracyjna analiza danych (EDA)**
+
+## Podstawowy podgląd danych:
+
+```{r echo=FALSE}
+# Załadowanie danych
+data(mtcars)
+
+# Podstawowy podgląd danych
+head(mtcars)  # Pierwsze 6 wierszy zbioru
+
+```
+
+Zbiór mtcars zawiera dane o 32 samochodach, a każda kolumna reprezentuje
+jedną cechę samochodu. Oto cechy w zbiorze:
+
+-   mpg: Mile per gallon (spalanie w milach na galon, przyjmuję że USA);
+    czyli ok 1,72l/km
+
+-   cyl: Liczba cylindrów
+
+-   disp: Pojemność silnika (w calach sześciennych)
+
+-   hp: Konie mechaniczne
+
+-   drat: Przełożenie tylnej osi
+
+-   wt: Waga samochodu (w tysiącach funtów)
+
+-   qsec: Czas przejazdu ćwierć mili (w sekundach)
+
+-   vs: Silnik (0 = V-engine, 1 = straight engine)
+
+-   am: Typ skrzyni biegów (0 = automatyczna, 1 = manualna)
+
+-   gear: Liczba biegów
+
+-   carb: Liczba gaźników (gaźnik to podzespół mający za zadanie
+    wytworzyć gotową mieszankę powietrzno-paliwową w benzynowym silniku
+    spalinowym, która następnie trafia do cylindrów, aby ulec spaleniu i
+    móc wytworzyć energię niezbędną do napędzenia kół pojazdu)
+
+**Sprawdzenie struktury danych:**
+
+```{r echo = FALSE}
+str(mtcars)
+```
+
+Wszystkie dane są numeryczne.
+
+## Podsumowanie statystyczne danych:
+
+```{r echo = FALSE}
+library(psych)
+describe(mtcars)
+```
+
+**Interpretacja najważniejszych cech zbioru:**
+
+-   Średnia spalania wynosi 20,09 mil/galon, czyli 11,71l/100km.
+    Największe spalanie wynosi 10,4 mil/galon, co w przeliczeniu daje
+    22,62l/100km.
+
+-   Vs (silnik) i am (typ skrzyni biegów) mają najmniejsze
+    zróżnicowania, gdyz są to jedyne zmienne binarne w tym zbiorze. Jest
+    przewaga skrzyń automatycznych i silników V-engine, ale nie bardzo
+    duża.
+
+-   Samochody są: 3, 4, 6, 8 lub nawet 12- cylindrowe. W tym zbiorze
+    występują 4, 6 i 8-cylindrowe i ich mediana wynosi 6.
+
+-   Występuje duże zróżnicowanie jest w kolumnie disp, która oznacza
+    pojemność silnika. Najmniejsza pojemność silnika to 71,1 cali
+    sześciennych i jest w samochodzie Toyota Corolla, a największa to
+    472 cali sześciennych występująca w Cadillac Fleetwood
+
+-   Średnia koni mechanicznych (hp) wynosi 146,69, przy czym jest spore
+    odchylenie standardowe wynoszące 68,56 konia mechanicznego.
+
+-   Średnia waga samochodu (wt) to 3,22 tysiąca funtów i także jest
+    wysokie odchylenie standardowe (0,98), czyli samochody dość znacznie
+    różnią się wagą.
+
+-   Średnia liczba biegów wynosi 3,69, przy czym najmniej to 3 a
+    najwięcej to 5, więc jest bardz mały zakres, stąd nieduże
+    zróżnicowanie
+
+-   Liczba gaźników w samochodach jest bardzo zróżnicowana, średnia to
+    2,81 a odchylenie standardowe 1,62
+
+**Sprawdzenie brakujących danych:**
+
+```{r echo =FALSE}
+sum(is.na(mtcars))
+```
+
+Brak brakujących danych.
+
+## Wizualizacja rozkładów:
+
+```{r echo =FALSE}
+# Histogramy dla kilku zmiennych
+par(mfrow=c(2,2))  # Podziel ekran na 2x2
+hist(mtcars$mpg, main="Rozkład spalania (mpg)", col="lightblue", xlab="mpg")
+hist(mtcars$wt, main="Rozkład wagi (wt)", col="lightblue", xlab="Waga (1000 lbs)")
+hist(mtcars$hp, main="Rozkład mocy (hp)", col="lightblue", xlab="Konie mechaniczne")
+hist(mtcars$drat, main="Rozkład przełożenia (drat)", col="lightblue", xlab="Przełożenie")
+
+```
+
+W rozkładzie spalania widać, że większa ilość samochodów jest po lewej
+stronie histogramu, co znaczy że większość aut ma wyższe spalanie (\>25
+mil/galon).
+
+Rozkład wagi aut jest równomiernie rozłożony do wagi 3, następnie widać
+że najwięcej aut ma wagę od 3-3.5 tysiąca funtów, a także spora liczba
+aut ma wagę pomiędzy 3.5-4. Wagę powyżej 4 tysiącą funtów ma zdecydowana
+mniejszość aut (12,5%)
+
+W rozkładzie mocy można zauważyć tendencję liniową, liczba samochodów
+maleje wraz ze zwiększaniem się liczby koni mechanicznych
+
+Rozkład przełożenia przypomina rozkład normalny, najwięcej aut ma
+przełozenie pomiędzy 3.5-4
+
+```{r echo =FALSE}
+par(mfrow=c(2,2))  # Podziel ekran na 2x2
+hist(mtcars$cyl, main="Rozkład cylindrów (cyl)", col="lightblue", xlab="Cylindry")
+hist(mtcars$disp, main="Rozkład poj. silnika (disp)", col="lightblue", xlab="Poj. silnika (cale sześcienne)")
+hist(mtcars$qsec, main="Rozkład czasu przejazdu ćwierć mili w s (qsec)", col="lightblue", xlab="ćwierć mili/sekunda")
+hist(mtcars$carb, main="Rozkład l. gaźników (carb)", col="lightblue", xlab="Gaźniki")
+```
+
+Na rozkładzie cylindrów, można zauważyć, że są tylko samochody z 4,6 i 8
+cylindrami, najwięcej jest 8-cylindowych.
+
+Rozkład pojemności silnika jest zróżnicowany, lecz najwięcej aut ma
+pojemność silnika od 100 do 150 cali sześciennych.
+
+Rozkład czasu przejazdu ćwierć mili w sekundach przypomina rozkład
+normalny, ze zdecydowaną większością ilością aut, które przejeżdżają w
+zakresie 16-20 na sekundę.
+
+Z rozkładu gażników wynika, że zdecydowana większość (ok 12 samochodów)
+ma dwa gaźniki.
+
+```{r echo =FALSE}
+par(mfrow=c(1,3))  # Podziel ekran na 2x2
+hist(mtcars$gear, main="Rozkład liczby biegów (gear)", col="lightblue", xlab="Biegi")
+hist(mtcars$vs, main="Rozkład silników (vs)", col="lightblue", xlab="Silnik")
+hist(mtcars$am, main="Rozkład typu skrzyni biegów (am)", col="lightblue", xlab="Typ skrzyni")
+```
+
+W rozkładzie liczby biegów widać, że najwięcej jest aut, które mają 3
+lub 4 biegi.
+
+W rozkładzie silników przeważają silniki V-engine i bardzo podobny jest
+wykres typu skrzyni biegów, gdzie widać przewagę automatycznej skrzyni.
+
+## Wykresy pudełkowe dla cech, które miały wysokie zróżnicowanie w celu wykrycia outlierów:
+
+```{r echo = FALSE}
+par(mfrow=c(2,2))  # Podziel ekran na 2x2
+boxplot(mtcars$disp, main="Boxplot - Poj. silnika (disp)", ylab="disp", col="lightblue")
+boxplot(mtcars$hp, main="Boxplot - Konie mechaniczne (hp)", ylab="liczba koni", col="lightblue")
+boxplot(mtcars$wt, main="Boxplot - Waga (wt)", ylab="Waga (1000 lbs)", col="lightblue")
+boxplot(mtcars$wt, main="Boxplot - Liczba gażników (carb)", ylab="gaźniki", col="lightblue")
+
+```
+
+Trzy zmienne (oprócz disp) mają wartości odstające. Zatem na całym
+zbiorze danych zastosuję zasadę 3 sigm w celu usunięcia wartości
+odstających:
+
+```{r}
+# Funkcja do usuwania wartości odstających
+remove_outliers <- function(df) {
+  for (col in colnames(df)) {
+    # Obliczanie średniej i odchylenia standardowego
+    mean_val <- mean(df[[col]], na.rm = TRUE)
+    sd_val <- sd(df[[col]], na.rm = TRUE)
+    
+    # Zakres dozwolonych wartości: średnia ± 3 odchylenia standardowe
+    lower_limit <- mean_val - 3 * sd_val
+    upper_limit <- mean_val + 3 * sd_val
+    
+    # Usuwanie wierszy, które mają wartości odstające w tej kolumnie
+    df <- df[df[[col]] >= lower_limit & df[[col]] <= upper_limit, ]
+  }
+  return(df)
+}
+
+# Usunięcie wartości odstających
+mtcars_cleaned <- remove_outliers(mtcars)
+
+# Wyświetlenie liczby oczyszczonych danych
+nrow(mtcars_cleaned)
+mtcars<-mtcars_cleaned
+```
+
+Zatem został usunięty 1 obiekt.
+
+## Sprawdzenie korelacji:
+
+```{r echo = FALSE,  message=FALSE, warning=FALSE, verbose = FALSE}
+# Załaduj potrzebne biblioteki
+library(corrplot)
+library(RColorBrewer)
+
+# Oblicz macierz korelacji
+cor_matrix <- cor(mtcars)
+
+# Wizualizacja macierzy korelacji z liczbami i kolorami
+corrplot(cor_matrix, 
+         method = "color",           # Wizualizacja za pomocą kolorów
+         type = "upper",             # Tylko górna część macierzy
+         order = "hclust",           # Grupowanie zmiennych
+         col = brewer.pal(n = 8, name = "RdBu"), # Paleta kolorów
+         tl.col = "black",           # Kolor etykiet
+         addCoef.col = "black",      # Dodanie wartości korelacji (czarny kolor)
+         number.cex = 0.7,           # Rozmiar czcionki dla liczb
+         diag = FALSE)               # Ukrycie diagonalnej części macierzy (1)
+```
+
+Występuję dużo silnych zależności między zmiennymi. Kilka wniosków:
+
+-   Największa zależność jest między liczbą cylindrów a pojemnością
+    silnika. Wraz ze wzrostem pojemności silnika wzrasta liczba
+    cylindrów. Podobna, silna zależność jest także np. między liczbą
+    koni mechanicznych a liczbą cylindrów, pojemnością silnika a wagą
+    samochodu, liczbą koni mechanicznych a pojemnością silnika.
+
+-   Silne zależności typu wraz ze wzrostem jednej zmiennej, maleje
+    druga, występują między innymi pomiędzy: spalaniek a liczbą koni,
+    spalaniem a wagą auta, spalaniem a liczbą cylindrów, spalaniem a
+    pojemnością silnika.
+
+-   Najsłabsze zależności są pomiędzy: liczbą koni mechanicznych a
+    liczbą biegów, liczbą ganików a typem skrzyni, przełożeniem a liczbą
+    gaźników
+
+# **Skalowanie wielowymiarowe (MDS)**
+
+## 1) Klasyczne skalowanie wielowymiarowe
+
+Celem jest zmniejszenie wymiaru danych przy jak najmniejszym
+zniekształceniu prawdziwych odległości. Posługuje się odległościami
+euklidesowymi między obiektami. Dodany także został współczynnik Stress,
+który w analizie MDS jest miarą niedopasowania odwzorowania danych
+wielowymiarowych na płaszczyźnie (lub w przestrzeni o zmniejszonym
+wymiarze). Ocenia, jak dobrze odległości między punktami w oryginalnej
+przestrzeni wielowymiarowej odpowiadają odległościom w przestrzeni o
+zmniejszonym wymiarze.
+
+Należy zauważyć, że jest to bardzo podobne do analizy PCA lub
+czynnikowej, ale wykorzystuje macierz odległości, a nie macierz
+korelacji jako dane wejściowe.
+
+"Problemem klasycznego skalowania (cmdscale) jest to, że zakłada ono
+odległości metryczne i dopasowuje do nich reprezentację przestrzenną. Na
+przykład, być może uważamy, że mamy błąd w naszym pomiarze, a te błędy
+mogą być nieliniowe. Albo może nie możemy liczyć na nic poza wartościami
+porządkowymi naszej miary odmienności." (żródło:
+"<https://pages.mtu.edu/~shanem/psy5220/daily/Day16/MDS.html#sammons-non-linear-scaling-method>")
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+# Load required packages
+library(magrittr)
+
+library(dplyr)
+
+library(ggpubr)
+```
+
+Zaimplementowanie:
+
+```{r,message=FALSE, message=FALSE, warning=FALSE, verbose = FALSE}
+# Compute MDS with cmdscale
+
+dist_matrix <- dist(mtcars)  #  w tej funkcji liczy odgl. euklidesowa
+mds_result <- cmdscale(dist_matrix, eig = TRUE, k = 2)  # standaryzacja
+# Extract coordinates
+mds <- as.data.frame(mds_result$points)
+colnames(mds) <- c("Dim.1", "Dim.2")
+# Add car names as a column
+mds$Car <- rownames(mtcars)
+
+# Calculate distances in reduced 2D space
+reduced_dist <- dist(mds[, c("Dim.1", "Dim.2")])
+
+# Compute stress
+stress <- sqrt(sum((dist_matrix - reduced_dist)^2) / sum(dist_matrix^2))
+
+
+# Plot MDS
+ggscatter(mds, x = "Dim.1", y = "Dim.2", 
+          label = "Car",  # Use the 'Car' column for labels
+          size = 1,
+          repel = TRUE)
+```
+
+```{#kod na podstawie: https://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/122-multidimensional-scaling-#essentials-algorithms-and-r-code/#visualizing-a-correlation-matrix-using-multidimensional-scaling}
+```
+
+Widać pewne szczególne skupisko. Poniżej implementacja analizy skupień,
+aby łatwiej pogrupować wyniki:
+
+```{r, message=FALSE, warning=FALSE, verbose = FALSE}
+
+library(ggplot2)
+library(ggpubr)
+
+# Compute MDS with cmdscale
+dist_matrix <- dist(mtcars)  # Distance matrix (Euclidean)
+mds_result <- cmdscale(dist_matrix, eig = TRUE, k = 2)  # Perform MDS (2 dimensions)
+
+# Extract coordinates
+mds <- as.data.frame(mds_result$points)
+colnames(mds) <- c("Dim.1", "Dim.2")
+
+# Add car names as a column
+mds$Car <- rownames(mtcars)
+
+# Calculate distances in reduced 2D space
+reduced_dist <- dist(mds[, c("Dim.1", "Dim.2")])
+
+# Compute stress
+stress <- sqrt(sum((dist_matrix - reduced_dist)^2) / sum(dist_matrix^2))
+
+# Perform K-means clustering on the 2D MDS coordinates (choose 3 clusters as an example)
+set.seed(123)  # Set seed for reproducibility
+clust <- kmeans(mds[, c("Dim.1", "Dim.2")], centers = 3)$cluster
+mds$Cluster <- as.factor(clust)
+
+# Plot MDS with cluster results
+ggscatter(mds, x = "Dim.1", y = "Dim.2", 
+          label = "Car",  # Use the 'Car' column for labels
+          color = "Cluster",  # Color points by cluster
+          palette = "jco",  # Color palette
+          size = 1,
+          ellipse = TRUE,  # Add convex hulls for each cluster
+          ellipse.type = "convex",
+          repel = TRUE) +  # Avoid label overlap
+  ggtitle(paste("MDS Plot with K-means Clustering (Stress:", round(stress, 5), ")")) +
+  theme_minimal()
+
+
+
+
+```
+
+Zgodnie z interpretacją Kruskala jakość dopasowania danych jest bardzo
+dobra (stress\<0.05). Statystyki w wybranych zmiennych różnią się
+pomiędzy klastrami a wewnątrz nich są zbliżone, także na tej podstawie
+też można stwierdzić dobre pogrupowanie skalowania danych o samochodach.
+Skutecznie udało się zmniejszyć ilośc wymiarów do pogrupowania aut.
+
+Przeprowadzenie MDS w trzech wymiarach i pogrupowanie (interaktywny
+wykres):
+
+```{r echo =FALSE, message=FALSE, warning=FALSE, verbose = FALSE}
+# Ładowanie pakietów
+library(plotly)
+
+# Obliczenie odległości euklidesowych
+dist_matrix <- dist(mtcars)  # Odległości euklidesowe
+
+# MDS z trzema wymiarami
+mds_result <- cmdscale(dist_matrix, eig = TRUE, k = 3)  # k = 3 dla 3 wymiarów
+
+# Extract coordinates for 3 dimensions
+mds <- as.data.frame(mds_result$points)
+colnames(mds) <- c("Dim.1", "Dim.2", "Dim.3")  # Przypisanie nazw dla 3 wymiarów
+
+# Dodajemy nazwę samochodów
+mds$Car <- rownames(mtcars)
+
+# K-means clustering
+clust <- kmeans(mds[, c("Dim.1", "Dim.2", "Dim.3")], centers = 3)$cluster
+mds$Cluster <- as.factor(clust)
+
+# Obliczenie odległości w przestrzeni 3D
+reduced_dist <- dist(mds[, c("Dim.1", "Dim.2", "Dim.3")])
+
+# Obliczenie stresu (porównanie odległości w oryginalnej przestrzeni i w przestrzeni 3-wymiarowej)
+stress <- sqrt(sum((dist_matrix - reduced_dist)^2) / sum(dist_matrix^2))
+
+
+# Wykres 3D z użyciem plotly
+plot_ly(data = mds, 
+        x = ~Dim.1, 
+        y = ~Dim.2, 
+        z = ~Dim.3,  # Wybieramy trzeci wymiar
+        color = ~Cluster,  # Kolorowanie wg klastra
+        colors = c('red', 'green', 'blue'),  # Kolory dla klastrów
+        type = 'scatter3d', 
+        mode = 'markers+text',
+        text = ~Car,  # Etykiety to nazwy samochodów
+        textposition = 'top center',  # Ustawienie pozycji tekstu
+        marker = list(size = 5)) %>%
+  layout(title = paste("3D MDS Plot (Stress:", round(stress, 5), ")"),
+         scene = list(xaxis = list(title = "Dim 1"),
+                      yaxis = list(title = "Dim 2"),
+                      zaxis = list(title = "Dim 3")),
+         showlegend = TRUE)
+```
+
+Współczynnik Stress jest ponad 3 razy mniejszy niż przy zastosowaniu
+dwóch wymiarów. Na wykresie 3D szczególnie widać podobieństwo samochodów
+marki Mercedes w przydzielonych grupach, także można rzec, że Mazda RX4
+Wag nie różni się od Mazdy RX4. Zatem sprawdzę ich wartości:
+
+```{r echo = FALSE}
+library(dplyr)
+library(tibble)  
+
+# Przekształcenie nazw wierszy na kolumnę
+mtcars_with_names <- mtcars %>% 
+  rownames_to_column("Car")
+
+# Lista nazw samochodów, które chcesz wybrać
+car_names <- c("Mazda RX4", "Mazda RX4 Wag")
+
+# Filtruj dane na podstawie listy nazw samochodów
+selected_cars <- mtcars_with_names %>% 
+  filter(Car %in% car_names)
+
+# Wyświetl dane dla wybranych samochodów
+print(selected_cars)
+mtcars<-mtcars_with_names
+```
+
+Jak widać, z tych wartości wynika, że te samochody są można rzec prawie
+takie same. Teraz na tej podstawie porównam również auta marki Mercedes,
+które należą do trzech grup:
+
+```{r echo = FALSE}
+
+
+car_names <- c("Merc 450SL", "Merc 450SE", "Merc 450SLC", "Merc 280C", "Merc 280", "Merc 230", "Merc 240D")
+
+selected_cars <- mtcars %>% 
+  filter(Car %in% car_names)
+
+print(selected_cars)
+```
+
+Mercedesy należące do klastra 1 różnią się jedynie spalaniem (mpg), lecz
+nie wiele. Mercedesy należące do grupy 2 także różnią się spalaniem i
+wagą, ale są to niewielkie różnice. Od Mercedesów z pierwszej grupy
+różnią się liczbą gaźników (mają 3 a nie 4), silnikiem, zdecydowanie
+większą liczbą koni mechanicznych, ważą więcej, mają 8 cylindrów zamiast
+6. Charakteryzują się dużą pojemnością silnika, niższymi wartościami
+przełozenia osi tylnej. Mercedesy należace do grupy 3 są unikatowe w
+porównaniu do poprzednich. Wyróżniają się najniższym spalaniem,
+najmniejszą liczbą cylindrów, najmniejszą pojemnością silnika,
+najmniejszą liczbą koni mechanicznych, z najmniejszą wagą, najdłużej
+rozpędzające się.
+
+Wniosek: Metoda MDS umożliwia świetne przedstawienie podobieństwa między
+obiektami w wybranym zbiorze danych. W połączeniu z analizą skupień,
+samochody zostały świetnie pogrupowane.
+
+**Zalety metody:**
+
+-   na tym zbiorze danych świetnie się sprawdziła, wyniki są czytelnie
+    przedstawione i udało skutecznie się pozbyć wielowymiarowości
+
+-   zachowuje wzajemne odległości (lub podobieństwa/dysymilarności)
+    między obiektami, umożliwiając dokładne odwzorowanie ich relacji w
+    zredukowanej przestrzeni.
+
+-   można skuteczniej pogrupować w klastry
+
+-   brak założeń o normalności danych
+
+**Wady:**
+
+-   wymaga danych metrycznych, tj. takich, które spełniają warunki
+    metryki (np. odległość Euklidesowa)
+
+-   wrażliwość na dane odstające
+
+-   brak interpretacji osi
+
+-   wrażliwośc na wybór miary odległości
+
+## 2) Metoda skalowania Sammona
+
+W tej metodzie także została użyta odległość euklidesowa. Różni się od
+poprzedniej poprzez dodanie wag i jest bardziej elastyczna, ponieważ nie
+zakłada, że odległości między punktami muszą być metryczne. Skalowanie
+Sammona jest szczególnie przydatne, gdy zależy nam na zachowaniu
+odległości lokalnych i względnych.
+
+Implementacja i wyniki:
+
+```{r  message=FALSE, warning=FALSE, verbose = FALSE}
+library(MASS)  # Pakiet do skalowania Sammona
+library(ggplot2)  # Do wizualizacji wyników
+library(dplyr)  # Do manipulacji danymi
+
+
+
+# Oblicz odległości (euklidesowe)
+dist_matrix <- dist(mtcars)
+
+# skalowanie Sammona (redukcja do 2 wymiarów)
+sammon_result <- sammon(dist_matrix, k = 2)
+
+#  współrzędne w 2 wymiarach
+sammon_mds <- as.data.frame(sammon_result$points)
+colnames(sammon_mds) <- c("Dim.1", "Dim.2")
+
+#nazwy samochodów
+sammon_mds$Car <- mtcars$Car
+
+#  współczynnik stress
+reduced_dist <- dist(sammon_mds[, c("Dim.1", "Dim.2")])
+stress <- sqrt(sum((dist_matrix - reduced_dist)^2) / sum(dist_matrix^2))
+
+# Zastosowanie analizy skupień (K-means)
+set.seed(123)  # Ustalamy ziarno losowości dla reprodukowalności
+kmeans_result <- kmeans(sammon_mds[, c("Dim.1", "Dim.2")], centers = 3)  # Można zmienić liczbę klastrów
+
+# Dodanie wyników klasteryzacji do danych
+sammon_mds$Cluster <- as.factor(kmeans_result$cluster)
+
+# Dodanie kolumny Cluster do oryginalnego zbioru mtcars
+mtcars$ClusterSammon <- clust
+
+# Wizualizacja wyników na wykresie
+ggplot(sammon_mds, aes(x = Dim.1, y = Dim.2, color = Cluster)) +
+  geom_point(size = 3) +  # Punkty reprezentujące samochody
+  geom_text(aes(label = Car), vjust = -0.5, hjust = 1.5, size = 3) +  # Etykiety samochodów
+  theme_minimal() +
+  ggtitle(paste("Sammon Scaling with K-means Clustering (Stress:", round(stress, 5), ")")) +  # Dodanie współczynnika stress w tytule
+  theme(axis.title = element_blank(), axis.text = element_blank()) +  # Ukrycie osi
+  scale_color_manual(values = c("blue", "red", "green"))  # Kolory dla klastrów
+
+
+```
+
+Współczynnik stresu jest troszkę wyższy niż w klasycznym MDS (0.00196).
+Porównanie przypisania klastrów:
+
+```{r echo = FALSE}
+sammon_mds$Cluster
+mtcars$Cluster
+```
+
+Pierwszy wiersz dotyczy metody skalowania Sammona, drugi klasycznego
+skalowania. Przypisano tak samo klastry do obiektów. Także ta metoda
+sprawdziła się równie doskonale, gdyż tak samo dobrze zminimalizowała
+liczbę wymiarów.
+
+**Zalety:**
+
+-   nieliniowość, co pozwala lepiej oddać skomplikowane, nieliniowe
+    relacje w danych
+
+-   uniwersalność i może być stosowana do różnych typów danych, o ile
+    możliwe jest obliczenie macierzy odległości
+
+-   Skalowanie Sammona używa miary błędu (*stress function*), która
+    zmniejsza różnice między oryginalnymi odległościami a ich
+    odpowiednikami w zredukowanej przestrzeni, dzięki czemu końcowy
+    wynik jest bardziej dokładny, choć dokładniejszy wynik wyszedł w
+    klasycznym skalowaniu
+
+**Wady:**
+
+-   wrażliwośc na punkty odsjtające
+
+-    minimalizuje funkcję stresu iteracyjnie (np. algorytmem
+    gradientowym), co może prowadzić do zbieżności do lokalnego minimum,
+    a nie globalnego. Wynik może zależeć od początkowej konfiguracji.
+
+-   wymaga obliczenia macierzy odległości oraz iteracyjnej
+    optymalizacji, co może być kosztowne obliczeniowo, szczególnie dla
+    dużych zbiorów danych
+
+-   brak interpretacji osi
+
+-   dane także zależą od miary odległości
+
+## 3) Niemetryczne skalowanie wielowymiarowe
+
+Założeniem jest, że kolejność odległości ma znaczenie, zatem stosuje się
+odległość kolejności rang. Wyniki współczynnika Stress liczą się do
+określenia, czy kolejnośc rangi wszystkich odległości parami w
+rozwiązaniu jest taka sama jak kolejność rangi w podobieństwie. Ta
+metoda umożliwia skalowanie na danych porządkowych.
+
+Implementacja i wyniki:
+
+```{r message=FALSE, warning=FALSE, verbose = FALSE}
+library(vegan)
+
+
+# niemetryczne skalowanie wielowymiarowe (nMDS)
+nmds_result <- metaMDS(dist_matrix, k = 2, try = 20, autotransform = FALSE, trace = FALSE)  # k = 2 oznacza 2 wymiary w przestrzeni
+cat("Best stress value:", nmds_result$stress, "\n")
+# Współrzędne w przestrzeni 2D
+nmds_mds <- as.data.frame(nmds_result$points)
+colnames(nmds_mds) <- c("Dim.1", "Dim.2")
+
+nmds_mds$Car <- mtcars_with_names$Car
+
+# Zastosowanie analizy skupień (K-means)
+set.seed(123)  # Ustalamy ziarno losowości dla reprodukowalności
+kmeans_result <- kmeans(nmds_mds[, c("Dim.1", "Dim.2")], centers = 3)
+
+# Dodanie wyników klasteryzacji do danych
+nmds_mds$Cluster <- as.factor(kmeans_result$cluster)
+
+# Wizualizacja wyników na wykresie
+ggplot(nmds_mds, aes(x = Dim.1, y = Dim.2, color = Cluster)) +
+  geom_point(size = 3) +  # Punkty reprezentujące samochody
+  geom_text(aes(label = Car), vjust = -0.5, hjust = 1.5, size = 3) +  # Etykiety samochodów
+  theme_minimal() +
+  ggtitle("nMDS (Non-metric Multidimensional Scaling) with K-means Clustering") +
+  theme(axis.title = element_blank(), axis.text = element_blank()) +  # Ukrycie osi
+  scale_color_manual(values = c("blue", "red", "green"))  # Kolory dla klastrów
+
+```
+
+Klastry zostały przypisane tak samo, lecz nastąpiło "odbicie lustrzane"
+obiektów. Gdy spojrzymy na Mercedesy 450 (czerwony klastr), to w tej
+metodzie są narysowane jako jedna kropka, a w poprzedniej widać
+nałożenie się kilku kropek, skąd wynika że metoda jest mniej dokładna od
+poprzedniej. Wyniki mniejszej precyzji wydają się intuincyjne jak nie
+obliczamy "surowych odległości między danymi" tylko odległości między
+rangami.
+
+**Zalety:**
+
+-   zastosowanie do danych niemetrycznych
+
+-   odporność na wartości odstające
+
+-   brak założeń dotyczących rozkładu danych np normalności czy
+    liniowości
+
+**Wady:**
+
+-   brak interpretacji osi
+
+-   wrażliwość na wybór miary odległości
+
+-   mniejsza dokładność w porównaniu do poprzednich metod
+
+-   wrażliwość na braki w danych
+
+# **PCA**
+
+PCA jest techniką redukcji wymiarów, która pozwala na zrozumienie
+struktury danych poprzez przekształcenie ich na zestaw nowych zmiennych
+(główne składowe), które są liniowymi kombinacjami oryginalnych
+zmiennych. W tej metodzie posługujemy się korelacją między zmiennymi,
+**a ze wstępnej analizy danych wynika, że dane są wysoko skorelowane ze
+sobą, zatem można ich użyć**. Główną różnicą pomiędzy PCA a skalowaniem
+wielowymiarowym jest to, że skalowanie wielowymiarowe tak naprawdę nie
+wymaga znajomości surowych danych a jedynie odległości pomiędzy
+obserwacjami. Biorę pod uwagę jak wynika z EDA, że nie wszystkie zmienne
+mają rozkład normalny, a PCA zakłada rozkład normalny, przez co wyniki
+moga być gorsze.
+
+PCA nie ma bezpośredniego współczynnika **stress**, ponieważ jest to
+technika liniowa, a **stress** jest używany w analizie nieliniowej, jak
+w przypadku MDS. Jednak PCA może pomóc w zrozumieniu struktury danych,
+koncentrując się na wariancji wyjaśnionej przez kolejne składowe.
+
+**Test Barletta, aby sprawdzić istotnośc korelacji:**
+
+```{r echo =FALSE}
+data(mtcars)
+
+# Wykonanie testu Bartletta na danych mtcars
+bartlett_test <- bartlett.test(mtcars)
+
+# Wyświetlenie wyników testu
+print(bartlett_test)
+
+```
+
+Wartość p-value jest mniejsza od 2.2e-16, zatem jest mniejsza od 0,05
+poziomu istotności. Odrzucam H0 o równości macierzy kowariancji, zmienne
+w zestawie danych sa dostatecznie powiązane, aby wykonać PCA.
+
+**Kolejny test - obliczenie współczynnika KMO**
+
+```{r echo =FALSE}
+
+# Obliczenie współczynnika KMO dla danych mtcars
+kmo_result <- KMO(mtcars)
+
+# Wyświetlenie wyników
+print(kmo_result)
+
+```
+
+W zależności od żródła uważa się, że do analizy uprawnia KMO\>0.5
+(\>0.7). Dane mtcars spełniają także ten warunek - ogólny wynik to 0.83.
+
+***W implementacji zostało uwzględnione skalowanie danych.***:
+
+## Wykres łamańca:
+
+```{r }
+library(ggplot2)
+data("mtcars")
+
+# Normalizacja danych przed zastosowaniem PCA (standaryzacja)
+mtcars_scaled <- scale(mtcars)
+
+# Przeprowadzenie PCA
+pca_result <- prcomp(mtcars_scaled, center = TRUE, scale. = TRUE)
+
+
+# Wykres wariancji wyjaśnionej przez główne składowe
+screeplot(pca_result, main = "Wykres łamańca (PCA)", col = "blue", lwd = 2)
+
+
+```
+
+Scree plot (wykres łamańca) to wykres używany głównie w analizie
+składowych głównych (PCA) oraz w innych technikach redukcji wymiaru,
+który pomaga ocenić liczbę składowych, które warto zatrzymać w analizie.
+W kontekście PCA, wykres ten pokazuje **wariancję** wyjaśnianą przez
+każdą z kolejnych składowych głównych.
+
+[**Wykres łamańca - opis:**]{.underline}
+
+1.  **Oś X**: przedstawia kolejność składowych głównych (np. 1, 2,
+    3,...).
+
+2.  **Oś Y**: przedstawia ilość wariancji (lub wartości własne)
+    wyjaśnianej przez każdą składową.
+
+-   **"Zgięcie" wykresu**: Na wykresie scree plot często pojawia się
+    punkt, w którym wykres przestaje gwałtownie opadać i zaczyna
+    stabilizować się, tworząc "łamaniec". W tym miejscu następuje
+    wyraźna zmiana w nachyleniu wykresu. To **zgięcie** zwykle wskazuje
+    na liczbę składowych, które należy zachować w dalszej analizie.
+    Zwykle w tym miejscu podejmuje się decyzję, by zatrzymać składowe
+    główne, które wyjaśniają znaczną część wariancji. Widać to, po
+    drugim słupku
+
+-   **"Odcinek poziomy"**: Po zgięciu wykres może przejść w bardziej
+    poziomą część, co oznacza, że kolejne składowe wyjaśniają już tylko
+    bardzo małą część wariancji i ich dodawanie nie wnosi istotnych
+    informacji. Zaczyna się od trzeciego słupka.
+
+Widać, że pierwsza składowa wyjaśnia ponad 60% wariancji, jest
+najistotniejsza, druga blisko 30%, **stąd wybrano dwie pierwsze
+składowe.**
+
+***Sprawdzenie ładunków składowych (zmienne wpływające na poszczególne
+PC):***
+
+```{r echo = FALSE }
+
+loadings <- pca_result$rotation
+
+# Wyświetlenie ładunków składowych
+print(loadings)
+```
+
+## Analiza wpływu zmiennych na poszczególne składowe PCA:
+
+PC1 (Pierwsza główna składowa):
+
+-   **Zmienna `cyl`** (0.37) ma największy wpływ na PC1, co sugeruje, że
+    liczba cylindrów w silniku ma dużą wagę w tej składowej.
+
+-   **Zmienna `mpg`** (-0.36) również ma silny wpływ na PC1, wskazując,
+    że spalanie paliwa (mpg) jest ważnym czynnikiem w tej składowej.
+
+-   **Zmienna `disp`** (0.37) i **`wt`** (0.35) również mają silny wpływ
+    na PC1.
+
+PC2 (Druga główna składowa):
+
+-   **Zmienna `am`** (0.43) ma największy wpływ na PC2, co sugeruje, że
+    typ skrzyni biegów (automatyczna/manualna) ma dużą wagę w tej
+    składowej.
+
+-   **Zmienna `gear`** (0.46) ma także duży wpływ na PC2, co może
+    wskazywać na związek z liczbą biegów.
+
+-   **Zmienna `qsec`** (-0.46) wpływa również na PC2, sugerując, że czas
+    przyspieszenia ma pewne znaczenie w tej składowej.
+
+## Biplot
+
+Implementacja biplotu:
+
+```{r}
+# Biplot - wizualizacja wyników PCA
+# Zwiększenie rozmiaru wykresu
+par(mar = c(4, 4, 2,2))  # Zwiększenie marginesów, aby wykres miał więcej przestrzeni
+
+# Tworzenie biplotu
+biplot(pca_result, cex = 0.5)  # Zmniejszenie rozmiaru punktów tekstowych, aby były czytelne
+
+```
+
+**Interpretacja głównych składowych (PC1, PC2)**:
+
+-   **PC1**: Na osi PC1 są wyświetlane zmienne, które wyjaśniają
+    największą część wariancji w danych. Na wykresie widać, że zmienne
+    hp, cyl, disp, mpg i am mają na nią największy wpływ, **co
+    potwierdza wcześniejsza analiza.**
+
+-   **PC2**: PC2 reprezentuje drugą największą część wariancji w danych.
+    Zmienne są ważne dla tej składowej: gear, am, drat, **co potwierdza
+    wczesniejsza analiza.**
+
+    **Można zauważyć, które zmienne miały największy wpływ na
+    rozmieszczenie aut w przestrzeni głownych składowych tj**
+
+-   Porsche 914-2 - zmienne gear i am,
+
+-   Lotus Europa - zmienna drat
+
+-    Merc 230 i Toyota Corona - zmienna qsec
+
+```{r }
+
+#  dane PCA i nazwy samochodów
+pca_data <- as.data.frame(pca_result$x)
+pca_data$Car <- rownames(mtcars)  # Dodanie nazw samochodów do danych
+
+# (K-means) na pierwszych dwóch głównych składowych
+set.seed(123) 
+kmeans_result <- kmeans(pca_data[, c("PC1", "PC2")], centers = 3)  # 3 klastry
+
+# Dodanie wyników analizy skupień do danych PCA
+pca_data$Cluster <- as.factor(kmeans_result$cluster)
+
+# Wizualizacja wyników PCA z analizą skupień
+ggplot(pca_data, aes(x = PC1, y = PC2)) +
+  geom_point(aes(color = Cluster), size = 3) +  # Punkty kolorowane według klastrów
+  geom_text(aes(label = Car), vjust = -0.5, hjust = 1.5, size = 3) +
+  theme_minimal() +
+  ggtitle("PCA z analizą skupień (K-means)") +
+  theme(axis.title = element_blank(), axis.text = element_blank()) +
+  scale_color_manual(values = c("red", "green", "blue")) 
+
+```
+
+Jak widać, wyniki różnią się od poprzednich metod. Uwidaczniają się
+bardzo duże podobieństwa aut w grupie zielonej. Oto, więc ich wartości:
+
+```{r echo = FALSE, message=FALSE, warning=FALSE, verbose = FALSE}
+library(tidyr)
+
+# Identyfikacja samochodów w zielonym klastrze (Cluster 2 w tym przypadku)
+zielony_cluster <- pca_data[pca_data$Cluster == 2, "Car"]
+
+# Wyświetlenie danych mtcars dla samochodów w zielonym klastrze
+mtcars_zielony <- mtcars[zielony_cluster, ]
+print(mtcars_zielony)
+
+# Obliczenie współczynnika zmienności (CV) dla każdej zmiennej numerycznej
+library(dplyr)
+
+cv_zielony <- mtcars_zielony %>%
+  summarise(across(where(is.numeric), 
+                   list(cv = ~ sd(.) / mean(.) * 100),  # CV jako % (procent)
+                   .names = "{.col}_cv")) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "CV")  # Formatowanie wyników
+
+# Wyświetlenie tylko współczynnika zmienności
+print("Współczynnik zmienności dla samochodów w zielonym klastrze:")
+print(cv_zielony)
+```
+
+Są pewne wartości, które są identyczne dla pewnych zmiennych.
+Współczynnik zmienności dla pięciu zmiennych jest większy niż 10%, lecz
+niższy niż 30% co wskazuje na umiarkowaną zmienność tych danych.
+
+**Zalety PCA:**
+
+-   usuwa wielowymiarowość
+
+-   analiza identyfikuje korelacje między zmiennymi i tworzy nowe,
+    niezależne zmienne (główne składowe), co eliminuje nadmiar
+    informacji.
+
+-   usuwa współzależność
+
+-    redukuje wpływ szumu w danych, koncentrując się na najbardziej
+    istotnych składnikach
+
+**Wady PCA:**
+
+-   brak interpretowalności danych, składniki główne są kombinacji
+    oryginalnych zmiennych,
+
+-   zmienne muszą być wysoko skorelowane ze sobą
+
+-   jest metodą liniową, więc nie wychwyca nieliniowych zależności
+
+-   normalność rozkładu zmiennych
+
+-   wyniki tej metody są trudne do interpretacji
+
+-   tylko dane metryczne
+
+-   PCA działa lepiej na dużych zbiorach danych, ponieważ w małych
+    próbkach wyniki mogą być niestabilne i niewiarygodne, co widać na
+    przedstawionych zbiorze mtcars. Pomimo "przejścia" danych przez
+    testy do PCA, nie zostały one tak dobrze pogrupowane jak w
+    poprzednich metodach. Poprzez PCA zredukowaliśmy liczbę wymiarów,
+    lecz poprzednie metody wydają się być lepiej dostosowane do danych
+    mtcars.
+
+# **Porównanie metod**
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(knitr)
+
+# Tworzenie tabeli porównawczej metod
+comparison_table <- data.frame(
+  Kryterium = c("Typ danych", "Zachowanie odległości", "Zachowanie wariancji", 
+                "Założenie liniowości", "Złożoność obliczeniowa"),
+  PCA = c("Metryczne", "Przybliżone", "Tak", "Tak", "Niska"),
+  MDS = c("Metryczne", "Dokładne", "Nie", "Tak", "Średnia"),
+  NMDS = c("Porządkowe/niemetryczne", "Relatywne (porządek)", "Nie", "Nie", "Wysoka"),
+  Sammona = c("Metryczne", "Dokładne lokalnie", "Nie", "Nie", "Wysoka")
+)
+# Wyświetlenie tabeli
+kable(comparison_table, format = "html", caption = "Porównanie metod analizy danych")
+
+```
+
+# **Podsumowanie**
+
+-   **PCA** sprawdza się w redukcji wymiarowości i analizie korelacji,
+    gdy dane są liniowe i metryczne.
+
+-   **MDK (MDS)** jest prostą metodą do analizy odległości, ale wymaga
+    metrycznych miar i jest wrażliwa na szum.
+
+-   **NMDS** jest elastyczna i efektywna w pracy z danymi porządkowymi
+    lub niemetrycznymi, ale wymaga większych zasobów obliczeniowych.
+
+-   **Metoda Sammona** jest przydatna, gdy zależy nam na zachowaniu
+    lokalnych struktur danych, jednak jej zastosowanie jest ograniczone
+    przez złożoność obliczeniową.
+
+**Do wybranego zbioru danych najlepiej sprawdziły się metody:
+klasycznego skalowania wielowymiarowego i skalowanie Sammona.**
