@@ -1,6 +1,6 @@
 ---
 title: "Analiza zbioru mtcars"
-author: "Sylvia Romek, 418348"
+author: "Sylvia Romek"
 output:
   html_document:
     toc: true
